@@ -234,11 +234,54 @@ The CI mode launches the app with `-platform offscreen` (no display needed), wai
 
 ## Using in your Qt app
 
-To use this toolkit in another Qt app:
+### Nix flake
 
-1. **Link the Qt plugin** — point `LOGOS_QT_MCP_ROOT` at this repo and use `add_subdirectory` in CMake
-2. **Reference the MCP server** in `.mcp.json` for AI agent interaction
-3. **Import the test framework** in your test files:
-   ```javascript
-   import { test, run } from "/path/to/logos-qt-mcp/test-framework/framework.mjs";
-   ```
+Add as a flake input:
+
+```nix
+inputs = {
+  logos-qt-mcp.url = "github:logos-co/logos-qt-mcp";
+};
+```
+
+The default package exposes `qt-plugin/`, `mcp-server/`, and `test-framework/` directories. Use it in your build:
+
+```nix
+logosQtMcp = logos-qt-mcp.packages.${system}.default;
+
+# In your app's nix build, copy the qt-plugin source and pass to CMake:
+cp -r ${logosQtMcp}/qt-plugin ./logos-qt-mcp/qt-plugin
+cmake ... -DLOGOS_QT_MCP_ROOT=$(pwd)/logos-qt-mcp
+```
+
+### CMake
+
+Point `LOGOS_QT_MCP_ROOT` at this repo (or the nix package) and the consumer's `CMakeLists.txt` uses:
+
+```cmake
+add_subdirectory(${LOGOS_QT_MCP_ROOT}/qt-plugin ${CMAKE_CURRENT_BINARY_DIR}/qml-inspector)
+target_link_libraries(MyApp PRIVATE qml-inspector)
+```
+
+### MCP server
+
+Reference in `.mcp.json` for AI agent interaction:
+
+```json
+{
+  "mcpServers": {
+    "qml-inspector": {
+      "command": "node",
+      "args": ["/path/to/logos-qt-mcp/mcp-server/index.mjs"]
+    }
+  }
+}
+```
+
+### Test framework
+
+Import in your test files:
+
+```javascript
+import { test, run } from "/path/to/logos-qt-mcp/test-framework/framework.mjs";
+```
