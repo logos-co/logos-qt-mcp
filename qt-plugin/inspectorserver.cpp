@@ -661,6 +661,17 @@ QJsonObject InspectorServer::cmdFindAndClick(const QJsonObject &params)
         QObject *obj = stack.takeFirst();
         if (!obj) continue;
 
+        QQuickItem *item = qobject_cast<QQuickItem*>(obj);
+        if (item) {
+            for (auto *child : item->childItems())
+                enqueue(child);
+        }
+        QQuickWidget *qw = qobject_cast<QQuickWidget*>(obj);
+        if (qw && qw->rootObject())
+            enqueue(qw->rootObject());
+        for (auto *child : obj->children())
+            enqueue(child);
+
         QVariant textVal = obj->property("text");
         if (!textVal.isValid())
             continue;
@@ -674,7 +685,7 @@ QJsonObject InspectorServer::cmdFindAndClick(const QJsonObject &params)
         bool typeMatches = true;
         if (!filterType.isEmpty()) {
             QString className = QString::fromUtf8(obj->metaObject()->className());
-            typeMatches = (className == filterType || className.endsWith(filterType));
+            typeMatches = (className == filterType || className.contains(filterType));
         }
 
         if (!typeMatches)
@@ -688,18 +699,6 @@ QJsonObject InspectorServer::cmdFindAndClick(const QJsonObject &params)
             clickResult["matchedId"] = objectId;
             break;
         }
-
-        // Traverse children
-        QQuickItem *item = qobject_cast<QQuickItem*>(obj);
-        if (item) {
-            for (auto *child : item->childItems())
-                enqueue(child);
-        }
-        QQuickWidget *qw = qobject_cast<QQuickWidget*>(obj);
-        if (qw && qw->rootObject())
-            enqueue(qw->rootObject());
-        for (auto *child : obj->children())
-            enqueue(child);
     }
 
     if (!isOk(clickResult))
