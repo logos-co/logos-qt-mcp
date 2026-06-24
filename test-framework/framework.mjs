@@ -95,11 +95,47 @@ export class App {
     this.inspector = inspector;
   }
 
-  /** Click an element by its text label. */
+  /** Clicks an element by its text label. Performs case-insensitive,
+   *  approximate (substring) matching; e.g. click("Storage") will
+   *  match buttons with text "storage", "storage_ui", or
+   *  "ui_storage_button" as labels.
+   */
   async click(text, opts = {}) {
     const res = await this.inspector.send("findAndClick", { text, ...opts });
     if (res.error) throw new Error(`click("${text}"): ${res.error}`);
     return res;
+  }
+
+  /** Clicks an element by object ID. */
+  async clickById(objectId) {
+    const res = await this.inspector.send("click", { objectId });
+    if (res.error) throw new Error(`clickById("${objectId}"): ${res.error}`);
+    return res;
+  }
+
+  /** Finds a clickable object with matching property value, and clicks it.
+   * Unlike {@link App#click}, this performs exact matches on property values.
+   */
+  async clickByProperty(prop, value) {
+    const matches = await this.findByProperty(prop, value);
+    if (matches.error) throw new Error(`clickByProperty: ${matches.error}`);
+
+    for (const candidate of matches.matches) {
+      try {
+        const result = await this.clickById(candidate.id);
+        result.matchedText = candidate.text;
+        result.matchedType = candidate.type;
+        result.matchedId = candidate.id;
+
+        return result;
+      } catch (e) {
+        // Continue to next candidate.
+        // FIXME we should do a better job at distinguishing exceptions
+        //  because things are not clickable from exceptions because of
+        //  other things (e.g. can't connect to inspector server).
+      }
+    }
+    throw new Error(`clickByProperty: no matches for ${JSON.stringify(prop)}=${JSON.stringify(value)}`);
   }
 
   /** Take a screenshot. Returns { image (base64), width, height }. */
@@ -143,6 +179,14 @@ export class App {
     return this.inspector.send("getProperties", { objectId });
   }
 
+  async getProperty(objectId, name) {
+    const props = await this.getProperties(objectId);
+    if (props.error) throw new Error(`getProperties failed: ${props.error}`);
+    const prop = props.properties.find((p) => p.name === name);
+    if (!prop) throw new Error(`Property "${name}" not found on ${objectId}`);
+    return prop.value;
+  }
+
   /** Assert that elements with the given texts exist in the UI. */
   async expectTexts(texts) {
     const missing = [];
@@ -172,20 +216,24 @@ export class App {
     if (res.error || !res.matches || res.matches.length === 0) {
       throw new Error(`No object found with type "${typeName}"`);
     }
-    const objId = res.matches[0].id;
-    const props = await this.inspector.send("getProperties", { objectId: objId });
-    if (props.error) throw new Error(`getProperties failed: ${props.error}`);
-    const prop = props.properties.find((p) => p.name === propName);
-    if (!prop) throw new Error(`Property "${propName}" not found on ${typeName}`);
-    return prop.value;
+    return this.expectPropertyOnObject(res.matches[0].id, propName);
   }
 
   /** Assert a property value on an object found by type. */
   async expectProperty(typeName, propName, expected) {
-    const actual = await this.getPropertyByType(typeName, propName);
-    if (actual !== expected) {
+    const res = await this.inspector.send("findByType", { typeName });
+    if (res.error || !res.matches || res.matches.length === 0) {
+      throw new Error(`No object found with type "${typeName}"`);
+    }
+    return await this.expectPropertyOnObject(res.matches[0].id, propName, expected);
+  }
+
+  /** Assert a property value on a specific object (by object ID). */
+  async expectPropertyOnObject(objectId, propName, expected) {
+    const prop = await this.getProperty(objectId, propName);
+    if (prop !== expected) {
       throw new Error(
-        `Expected ${typeName}.${propName} to be ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`
+        `Expected ${objectId}.${propName} to be ${JSON.stringify(expected)}, got ${JSON.stringify(prop)}`
       );
     }
   }
@@ -195,8 +243,7 @@ export class App {
     const start = Date.now();
     while (Date.now() - start < timeout) {
       try {
-        await fn();
-        return;
+        return await fn();
       } catch {
         await new Promise((r) => setTimeout(r, interval));
       }

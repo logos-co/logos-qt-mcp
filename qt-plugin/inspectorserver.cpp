@@ -642,6 +642,7 @@ QJsonObject InspectorServer::cmdFindAndClick(const QJsonObject &params)
 
     QString filterType = params.value("type").toString();
     bool exact = params.value("exact").toBool(false);
+    bool visibleOnly = params.value("visibleOnly").toBool(true);
 
     if (!m_rootWidget)
         return errorResult("No root widget");
@@ -690,6 +691,12 @@ QJsonObject InspectorServer::cmdFindAndClick(const QJsonObject &params)
 
         if (!typeMatches)
             continue;
+
+        if (visibleOnly) {
+            bool visible = obj->property("visible").toBool();
+            if (!visible)
+                continue;
+        }
 
         QString objectId = registerObject(obj);
         clickResult = cmdClick(QJsonObject{{"objectId", objectId}});
@@ -846,6 +853,15 @@ QJsonObject InspectorServer::cmdFileDialogAction(const QJsonObject &params)
             QString fileUrl = "file://" + params.value("path").toString();
             if (!obj->setProperty("selectedFile", QUrl(fileUrl))) {
                 qWarning() << "Failed to set selectedFile property on" << objectId;
+            }
+        }
+    } else if (action == "selectFolder") {
+        if (fDialog) {
+            fDialog->setDirectory(params.value("path").toString());
+        } else {
+            QString folderUrl = "file://" + params.value("path").toString();
+            if (!obj->setProperty("currentFolder", QUrl(folderUrl))) {
+                qWarning() << "Failed to set selectedFolder property on" << objectId;
             }
         }
     } else {

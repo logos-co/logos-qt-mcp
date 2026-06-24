@@ -143,6 +143,10 @@ const TOOLS = [
           type: "boolean",
           description: "If true, require exact text match instead of partial (default false)",
         },
+        visibleOnly: {
+          type: "boolean",
+          description: "If true, only attempts to click visible elements (defaults false)",
+        }
       },
       required: ["text"],
     },
@@ -344,13 +348,14 @@ const TOOLS = [
         },
         action: {
           type: "string",
-          enum: ["accept", "cancel", "select"],
+          enum: ["accept", "cancel", "select", "selectFolder"],
           description: "Action to perform on the dialog. 'accept' confirms the selection, 'cancel' dismisses the dialog, " +
-            "'select' selects a file/directory (requires a path to be provided)."
+            "'select' selects a file, whereas 'selectFolder' puts the dialog into the provided folder (requires a path to" +
+            "be provided)."
         },
         path: {
           type: "string",
-          description: "Path to select (for 'select' action)."
+          description: "Path to select (for 'select' and 'selectFolder' actions)."
         }
       },
       required: ["objectId", "action"]
