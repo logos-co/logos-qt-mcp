@@ -74,6 +74,7 @@ private:
     bool isOk(const QJsonObject &obj);
     bool isError(const QJsonObject &obj);
     QJsonArray findByType(const QString &typeName, QWidget * = nullptr);
+    void renderPendingQuickFrames(QWidget *root);
 
     void sendResponse(QTcpSocket *socket, const QJsonObject &response);
 
