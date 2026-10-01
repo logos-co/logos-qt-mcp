@@ -27,6 +27,9 @@
 #include <QSizeF>
 #include <QFont>
 #include <QFileDialog>
+#include <QAbstractEventDispatcher>
+#include <QSGRendererInterface>
+#include <QTimerEvent>
 
 InspectorServer::InspectorServer(QObject *parent)
     : QObject(parent)
@@ -471,6 +474,7 @@ QJsonObject InspectorServer::cmdScreenshot(const QJsonObject &params)
     if (!target)
         return errorResult("No widget available for screenshot");
 
+    renderPendingQuickFrames(target);
     QPixmap pixmap = target->grab();
     QByteArray ba;
     QBuffer buf(&ba);
@@ -1215,4 +1219,27 @@ QJsonArray InspectorServer::findByType(const QString &typeName, QWidget *root)
     }
 
     return results;
+}
+
+// With software Qt Quick (all the offscreen platform has), grab() paints a QQuickWidget's
+// last frame and the next one waits on a 5 ms timer: deliver that timer now.
+void InspectorServer::renderPendingQuickFrames(QWidget *root)
+{
+    QList<QQuickWidget*> quickWidgets = root->findChildren<QQuickWidget*>();
+    if (auto *qw = qobject_cast<QQuickWidget*>(root))
+        quickWidgets.prepend(qw);
+
+    for (QQuickWidget *qw : quickWidgets) {
+        QQuickWindow *window = qw->quickWindow();
+        QSGRendererInterface *renderer = window ? window->rendererInterface() : nullptr;
+        QAbstractEventDispatcher *dispatcher = QAbstractEventDispatcher::instance(qw->thread());
+        if (!qw->isVisible() || !renderer || !dispatcher
+            || renderer->graphicsApi() != QSGRendererInterface::Software)
+            continue;
+
+        for (const auto &timer : dispatcher->timersForObject(qw)) {
+            QTimerEvent event(timer.timerId);
+            QCoreApplication::sendEvent(qw, &event);
+        }
+    }
 }
