@@ -32,6 +32,7 @@ logos-qt-mcp/                    # This repo
     package.json
   test-framework/                # Reusable test library
     framework.mjs
+  tests/                         # This repo's own tests (see Tests below)
 ```
 
 App-specific tests stay in the app repo (e.g. `logos-basecamp/tests/ui-tests.mjs`) and import the framework from this repo.
@@ -288,3 +289,12 @@ Import in your test files:
 import { test, run } from "/path/to/logos-qt-mcp/test-framework/framework.mjs";
 ```
 
+## Tests
+
+`tests/` builds a small Qt app with the inspector, `popup.qml` in a QQuickWidget, and `tests/click-order.mjs` drives it through `test-framework/framework.mjs`. The flake runs it offscreen:
+
+```bash
+nix build .#checks.x86_64-linux.click-order -L
+```
+
+Against a build of your own: `node tests/click-order.mjs --ci <path to inspector-test-app>`.
