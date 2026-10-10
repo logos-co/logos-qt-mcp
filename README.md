@@ -63,6 +63,8 @@ The inspector exposes the full Qt object tree over TCP using a newline-delimited
 - Evaluate QML/JavaScript expressions
 - Find elements by type, property, or text
 
+Commands from one client run in order, and a click replies only after it has been delivered: the next command finds what the click's handler did, such as a Popup it opened (work the handler defers, like a timer or a transition, may still be pending). If that handler runs a nested event loop (`QDialog::exec`, a blocking IPC call), the reply is sent from inside the loop.
+
 ### Tree enrichment
 
 The object tree includes common identifying properties (`text`, `title`, `source`, `label`, etc.) directly in each node, so consumers don't need extra round-trips to identify elements.
@@ -285,3 +287,4 @@ Import in your test files:
 ```javascript
 import { test, run } from "/path/to/logos-qt-mcp/test-framework/framework.mjs";
 ```
+
