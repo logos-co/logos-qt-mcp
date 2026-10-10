@@ -32,6 +32,7 @@ logos-qt-mcp/                    # This repo
     package.json
   test-framework/                # Reusable test library
     framework.mjs
+  tests/                         # This repo's own tests (see Tests below)
 ```
 
 App-specific tests stay in the app repo (e.g. `logos-basecamp/tests/ui-tests.mjs`) and import the framework from this repo.
@@ -62,6 +63,8 @@ The inspector exposes the full Qt object tree over TCP using a newline-delimited
 - Take screenshots
 - Evaluate QML/JavaScript expressions
 - Find elements by type, property, or text
+
+Commands from one client run in order, and a click replies only after it has been delivered: the next command finds what the click's handler did, such as a Popup it opened (work the handler defers, like a timer or a transition, may still be pending). If that handler runs a nested event loop (`QDialog::exec`, a blocking IPC call), the reply is sent from inside the loop.
 
 ### Tree enrichment
 
@@ -285,3 +288,13 @@ Import in your test files:
 ```javascript
 import { test, run } from "/path/to/logos-qt-mcp/test-framework/framework.mjs";
 ```
+
+## Tests
+
+`tests/` builds a small Qt app with the inspector, `popup.qml` in a QQuickWidget, and `tests/click-order.mjs` drives it through `test-framework/framework.mjs`. The flake runs it offscreen:
+
+```bash
+nix build .#checks.x86_64-linux.click-order -L
+```
+
+Against a build of your own: `node tests/click-order.mjs --ci <path to inspector-test-app>`.
