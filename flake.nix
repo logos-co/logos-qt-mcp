@@ -46,6 +46,29 @@
         }
       );
 
+      # nix build .#checks.<system>.click-order -L
+      checks = forAllSystems ({ pkgs }: {
+        click-order = pkgs.stdenv.mkDerivation {
+          name = "qml-inspector-click-order";
+          src = ./.;
+          cmakeDir = "../tests";
+          nativeBuildInputs = [ pkgs.cmake pkgs.nodejs ];
+          buildInputs = [ pkgs.qt6.qtbase pkgs.qt6.qtdeclarative ];
+          dontWrapQtApps = true;
+          # The test talks to the app over loopback TCP.
+          __darwinAllowLocalNetworking = true;
+          doCheck = true;
+          checkPhase = ''
+            export HOME=$TMPDIR
+            export QT_PLUGIN_PATH=${pkgs.qt6.qtbase}/${pkgs.qt6.qtbase.qtPluginPrefix}
+            export QML_IMPORT_PATH=${pkgs.qt6.qtdeclarative}/${pkgs.qt6.qtbase.qtQmlPrefix}
+            export QML_INSPECTOR_PORT=37681  # not 3768, which a running app may hold
+            node ../tests/click-order.mjs --ci ./inspector-test-app
+          '';
+          installPhase = "touch $out";
+        };
+      });
+
       devShells = forAllSystems ({ pkgs }: {
         default = pkgs.mkShell {
           nativeBuildInputs = [ pkgs.nodejs ];

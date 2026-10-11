@@ -8,6 +8,7 @@
 #include <QJsonValue>
 #include <QMap>
 #include <QList>
+#include <QSet>
 
 class QTcpServer;
 class QTcpSocket;
@@ -38,6 +39,7 @@ private slots:
 
 private:
     // Command dispatch
+    void processCommands(QTcpSocket *socket);
     QJsonObject handleCommand(const QJsonObject &request);
 
     // Command handlers
@@ -81,6 +83,8 @@ private:
     QTcpServer *m_server = nullptr;
     QList<QTcpSocket*> m_clients;
     QMap<QTcpSocket*, QByteArray> m_buffers;
+    QSet<QTcpSocket*> m_awaitingReply;  // a reply is queued behind posted input
+    bool m_inputPosted = false;         // set by a command that posts input events
 
     QPointer<QWidget> m_rootWidget;
 

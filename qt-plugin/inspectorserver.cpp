@@ -73,6 +73,7 @@ void InspectorServer::stop()
             client->disconnectFromHost();
         m_clients.clear();
         m_buffers.clear();
+        m_awaitingReply.clear();
         m_server->close();
         delete m_server;
         m_server = nullptr;
@@ -113,9 +114,13 @@ void InspectorServer::onReadyRead()
     if (!socket) return;
 
     m_buffers[socket].append(socket->readAll());
+    processCommands(socket);
+}
 
+void InspectorServer::processCommands(QTcpSocket *socket)
+{
     // Process newline-delimited JSON messages
-    while (true) {
+    while (m_buffers.contains(socket) && !m_awaitingReply.contains(socket)) {
         int idx = m_buffers[socket].indexOf('\n');
         if (idx < 0) break;
 
@@ -133,9 +138,24 @@ void InspectorServer::onReadyRead()
             continue;
         }
 
-        QJsonObject request = doc.object();
-        QJsonObject response = handleCommand(request);
-        sendResponse(socket, response);
+        m_inputPosted = false;
+        QJsonObject response = handleCommand(doc.object());
+        if (!m_inputPosted) {
+            sendResponse(socket, response);
+            continue;
+        }
+
+        // Reply once the posted input has been delivered, and only then read this client's
+        // next command. Queued after the input events, the reply is sent right after them.
+        m_awaitingReply.insert(socket);
+        QPointer<QTcpSocket> client(socket);
+        QMetaObject::invokeMethod(this, [this, client, response] {
+            if (!client || !m_clients.contains(client.data()))
+                return;
+            m_awaitingReply.remove(client.data());
+            sendResponse(client, response);
+            processCommands(client);
+        }, Qt::QueuedConnection);
     }
 }
 
@@ -146,6 +166,7 @@ void InspectorServer::onClientDisconnected()
 
     m_clients.removeAll(socket);
     m_buffers.remove(socket);
+    m_awaitingReply.remove(socket);
     socket->deleteLater();
     qInfo() << "[QmlInspector] Client disconnected";
 }
@@ -558,6 +579,10 @@ QJsonObject InspectorServer::cmdClick(const QJsonObject &params)
 
     QApplication::postEvent(target, press);
     QApplication::postEvent(target, release);
+    // processCommands replies once these are delivered (replying here let Windows run the next
+    // command first). Posted, not sent: a click handler that nests an event loop (QDialog::exec,
+    // blocking IPC) then sends the reply from that loop instead of holding it.
+    m_inputPosted = true;
 
     return okResult({{"clicked", true}, {"x", x}, {"y", y},
                      {"widget", QString::fromUtf8(target->metaObject()->className())}});
